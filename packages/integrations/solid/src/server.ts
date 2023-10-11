@@ -21,6 +21,22 @@ async function check(
 	children: any
 ) {
 	if (typeof Component !== 'function') return false;
+
+	// Since there is nothing particularly special about Solid components, they are just
+	// plain functions, It seems that the check function may accidentally match MDX components.
+	// One example in particular I found was:
+	//
+	// packages/astro/test/fixtures/slots-solid/src/pages/mdx.mdx
+	//
+	// So we check that the component file does not end with ".mdx" just in case.
+
+	if (Component.moduleId?.endsWith?.('.mdx')) {
+		return false;
+	}
+
+	// Another possible check to ignore MDX could be for the existence of:
+	// Component[Symbol(mdx-component)]
+
 	const { html } = await renderToStaticMarkup.call(this, Component, props, children, {
 		// The check() function appears to just be checking if it is
 		// a valid Solid component. This should be lightweight so prefer
@@ -28,6 +44,7 @@ async function check(
 		// not try to load any resources.
 		renderStrategy: 'sync' as RenderStrategy,
 	});
+
 	return typeof html === 'string';
 }
 
@@ -98,10 +115,9 @@ async function renderToStaticMarkup(
 		}
 	};
 
-	let html = '';
-
 	if (needsHydrate && renderStrategy === 'async') {
 		if (!ctx.hasHydrationScript) {
+			// TODO: make sure hydration script appears in mdx page too
 			// The hydration script needs to come before to the first hydrating component of the page.
 			// One way to this would be to prepend the rendered output, eg:
 			//
@@ -123,10 +139,16 @@ async function renderToStaticMarkup(
 		}
 	}
 
-	html +=
-		renderStrategy === 'async'
-			? await renderToStringAsync(renderFn, { renderId })
-			: renderToString(renderFn, { renderId });
+	let html: string;
+
+	if (renderStrategy === 'async') {
+		// Side note: If Solid's renderToStringAsync is erronenously called on a MDX component,
+		// it seems that it may return a string of "undefined". This is a strange but not
+		// impossible result from normal usage, so we cannot throw an error in this case.
+		html = await renderToStringAsync(renderFn, { renderId });
+	} else {
+		html = renderToString(renderFn, { renderId });
+	}
 
 	return {
 		attrs: {
