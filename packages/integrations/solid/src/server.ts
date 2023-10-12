@@ -22,26 +22,14 @@ async function check(
 ) {
 	if (typeof Component !== 'function') return false;
 
-	// Since there is nothing particularly special about Solid components, they are just
-	// plain functions, It seems that the check function may accidentally match MDX components.
-	// One example in particular I found was:
-	//
-	// packages/astro/test/fixtures/slots-solid/src/pages/mdx.mdx
-	//
-	// So we check that the component file does not end with ".mdx" just in case.
-
-	if (Component.moduleId?.endsWith?.('.mdx')) {
-		return false;
-	}
-
-	// Another possible check to ignore MDX could be for the existence of:
-	// Component[Symbol(mdx-component)]
+	// There is nothing particularly special about Solid components. Basically they are just functions.
+	// In general, components from other frameworks (eg, MDX, React, etc.) tend to render as "undefined",
+	// so we take advantage of this trick to decide if this is a Solid component or not.
 
 	const { html } = await renderToStaticMarkup.call(this, Component, props, children, {
-		// The check() function appears to just be checking if it is
-		// a valid Solid component. This should be lightweight so prefer
-		// sync render strategy, which should simplify render Suspense fallbacks
-		// not try to load any resources.
+		// The purpose of check() is just to validate that this is a Solid component and not
+		// React, etc. We should render in sync mode which should skip Suspense boundaries
+		// or loading resources like external API calls.
 		renderStrategy: 'sync' as RenderStrategy,
 	});
 
@@ -81,7 +69,7 @@ async function renderToStaticMarkup(
 		if (renderStrategy === 'sync') {
 			// Sync Render:
 			// <Component />
-			// This render mode is not exposed directly to the consumer, only
+			// This render mode is not exposed directly to the end user. It is only
 			// used in the check() function.
 			return createComponent(Component, newProps);
 		} else {
@@ -115,7 +103,8 @@ async function renderToStaticMarkup(
 		}
 	};
 
-	let html = '';
+	let prepend = '';
+	let componentHtml: string | undefined = undefined;
 
 	if (needsHydrate && renderStrategy === 'async') {
 		if (!ctx.hasSolidHydrationScript) {
@@ -133,16 +122,15 @@ async function renderToStaticMarkup(
 			// we add the hydration script right before the component for now.
 			// For example, in the following test, the head is already rendered before
 			// this function is called:
+			//
 			// packages/astro/e2e/fixtures/nested-in-solid/package.json
 
-			// NOTE: It seems that components on a page may be rendered in parallel.
-			// To avoid a race condition, this code block is intentionally written
-			// *before* the first `await` in the function, so the hydration script will
-			// be prefixed to the first hydratable component on the page, regardless of
-			// the order in which the components finish rendering.
+			// NOTE: It seems that components on a page may be rendered in parallel using Promise.all()
+			// or similar. To try to get the hydration script as high up as possibile, if not in the <head>
+			// itself, this code block is intentionally written *before* the first `await` in the function.
 
 			if (this.result._metadata.hasRenderedHead) {
-				html += generateHydrationScript();
+				prepend = generateHydrationScript();
 			} else {
 				this.result._metadata.extraHead.push(generateHydrationScript());
 			}
@@ -152,19 +140,20 @@ async function renderToStaticMarkup(
 	}
 
 	if (renderStrategy === 'async') {
-		// Side note: If Solid's renderToStringAsync is erronenously called on a MDX component,
-		// it seems that it may return a string of "undefined". This is a strange but not
-		// impossible result from normal usage, so we cannot throw an error in this case.
-		html += (await renderToStringAsync(renderFn, { renderId })) ?? '';
+		componentHtml = await renderToStringAsync(renderFn, { renderId });
 	} else {
-		html += renderToString(renderFn, { renderId }) ?? 0;
+		componentHtml = renderToString(renderFn, { renderId });
 	}
 
 	return {
 		attrs: {
 			'data-solid-render-id': renderId,
 		},
-		html,
+		// componentHtml should in theory always be a string, but non-Solid components may
+		// return undefined. The check() function relies on this to check if the component
+		// is a solid component, thus we must check that componentHtml is actually a string
+		// and not just blindly concategate it with a a hydration script.
+		html: typeof componentHtml === 'string' ? prepend + componentHtml : componentHtml,
 	};
 }
 
