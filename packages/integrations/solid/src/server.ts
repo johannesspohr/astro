@@ -115,10 +115,12 @@ async function renderToStaticMarkup(
 		}
 	};
 
+	let html = '';
+
 	if (needsHydrate && renderStrategy === 'async') {
-		if (!ctx.hasHydrationScript) {
-			// TODO: make sure hydration script appears in mdx page too
+		if (!ctx.hasSolidHydrationScript) {
 			// The hydration script needs to come before to the first hydrating component of the page.
+			//
 			// One way to this would be to prepend the rendered output, eg:
 			//
 			// html += generateHydrationScript();
@@ -126,7 +128,12 @@ async function renderToStaticMarkup(
 			// However, in certain situations, nested components may be rendered depth-first, causing SolidJS
 			// to put the hydration script in the wrong spot.
 			//
-			// Therefore we render the hydration script to the extraHead so it can work anytime.
+			// Therefore we prefer to render to the extraHead when it is available.
+			// Sometimes, the head has already been rendered, so  in those cases
+			// we add the hydration script right before the component for now.
+			// For example, in the following test, the head is already rendered before
+			// this function is called:
+			// packages/astro/e2e/fixtures/nested-in-solid/package.json
 
 			// NOTE: It seems that components on a page may be rendered in parallel.
 			// To avoid a race condition, this code block is intentionally written
@@ -134,20 +141,23 @@ async function renderToStaticMarkup(
 			// be prefixed to the first hydratable component on the page, regardless of
 			// the order in which the components finish rendering.
 
-			this.result._metadata.extraHead.push(generateHydrationScript());
-			ctx.hasHydrationScript = true;
+			if (this.result._metadata.hasRenderedHead) {
+				html += generateHydrationScript();
+			} else {
+				this.result._metadata.extraHead.push(generateHydrationScript());
+			}
+
+			ctx.hasSolidHydrationScript = true;
 		}
 	}
-
-	let html: string;
 
 	if (renderStrategy === 'async') {
 		// Side note: If Solid's renderToStringAsync is erronenously called on a MDX component,
 		// it seems that it may return a string of "undefined". This is a strange but not
 		// impossible result from normal usage, so we cannot throw an error in this case.
-		html = await renderToStringAsync(renderFn, { renderId });
+		html += (await renderToStringAsync(renderFn, { renderId })) ?? '';
 	} else {
-		html = renderToString(renderFn, { renderId });
+		html += renderToString(renderFn, { renderId }) ?? 0;
 	}
 
 	return {
