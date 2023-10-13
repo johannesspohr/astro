@@ -39,7 +39,10 @@ describe('Solid component', () => {
 		it('Supports lazy server only components', async () => {
 			const html = await fixture.readFile('ssr-client-none/index.html');
 			const $ = cheerio.load(html);
-			expect($('button')).to.have.lengthOf(4);
+			// AsyncComponent renders 1 button
+			// LazyCounter renders 4 buttons
+			// Total is 5 buttons
+			expect($('button')).to.have.lengthOf(5);
 		});
 
 		// ssr-client-none-throwing.astro
@@ -63,7 +66,10 @@ describe('Solid component', () => {
 		it('Supports lazy hydrating components', async () => {
 			const html = await fixture.readFile('ssr-client-load/index.html');
 			const $ = cheerio.load(html);
-			expect($('button')).to.have.lengthOf(4);
+			// AsyncComponent renders 1 button, and there are 2 AsyncComponents
+			// LazyCounter renders 4 buttons
+			// Total is 6 buttons
+			expect($('button')).to.have.lengthOf(6);
 		});
 
 		// ssr-client-load-throwing.astro
@@ -87,10 +93,17 @@ describe('Solid component', () => {
 		// nested.astro
 
 		it('Injects hydration script before any SolidJS components in the HTML, even if heavily nested', async () => {
+			// TODO: This tests SSG mode, where the extraHead is generally available.
+			// Should add a test (and solution) for SSR mode, where head is more likely to have already
+			// been streamed to the client.
 			const html = await fixture.readFile('nested/index.html');
 			const firstHydrationScriptAt = String(html).indexOf('_$HY=');
 			const firstHydrationEventAt = String(html).indexOf('_$HY.set');
-			expect(firstHydrationScriptAt).to.be.lessThan(firstHydrationEventAt);
+			console.log('Position of hydration script ', firstHydrationScriptAt);
+			expect(firstHydrationScriptAt).to.be.lessThan(
+				firstHydrationEventAt,
+				'Position of first hydration event'
+			);
 		});
 	});
 

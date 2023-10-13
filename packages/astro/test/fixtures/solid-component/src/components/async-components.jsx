@@ -20,8 +20,8 @@ export function AsyncComponent(props) {
 
 	return (
 		<div data-name="AsyncComponent" style={{ border: 'black solid 1px', padding: '4px' }}>
-			{props.title + ' '}
-			id: {id + ' '}
+			{'title=' + (props.title ?? '(none)') + ' '}
+			{'id=' + id + ' '}
 			<span>{data()}</span>{' '}
 			<button
 				type="button"
