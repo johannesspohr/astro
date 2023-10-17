@@ -2005,6 +2005,11 @@ export interface SSRLoadedRenderer extends AstroRenderer {
 			attrs?: Record<string, string>;
 		}>;
 		supportsAstroStaticSlot?: boolean;
+		/**
+		 * If set, allowes the renderer to print a specific hydration script before
+		 * the first hydrated island
+		 */
+		renderHydrationScript?: () => string;
 	};
 }
 
@@ -2205,6 +2210,10 @@ export interface SSRResult {
  */
 export interface SSRMetadata {
 	hasHydrationScript: boolean;
+	/**
+	 * Keep track of which renderers already injected their specific hydration script
+	 */
+	hasRendererSpecificHydrationScript: Record<string, boolean>;
 	hasDirectives: Set<string>;
 	hasRenderedHead: boolean;
 	headInTree: boolean;
